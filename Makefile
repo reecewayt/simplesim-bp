@@ -1,20 +1,20 @@
 #
 # SimpleScalar(TM) Tool Suite
 # Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
-# All Rights Reserved. 
-# 
+# All Rights Reserved.
+#
 # THIS IS A LEGAL DOCUMENT, BY USING SIMPLESCALAR,
 # YOU ARE AGREEING TO THESE TERMS AND CONDITIONS.
-# 
+#
 # No portion of this work may be used by any commercial entity, or for any
 # commercial purpose, without the prior, written permission of SimpleScalar,
 # LLC (info@simplescalar.com). Nonprofit and noncommercial use is permitted
 # as described below.
-# 
+#
 # 1. SimpleScalar is provided AS IS, with no warranty of any kind, express
 # or implied. The user of the program accepts full responsibility for the
 # application of the program and the use of any results.
-# 
+#
 # 2. Nonprofit and noncommercial use is encouraged. SimpleScalar may be
 # downloaded, compiled, executed, copied, and modified solely for nonprofit,
 # educational, noncommercial research, and noncommercial scholarship
@@ -23,13 +23,13 @@
 # solely for nonprofit, educational, noncommercial research, and
 # noncommercial scholarship purposes provided that this notice in its
 # entirety accompanies all copies.
-# 
+#
 # 3. ALL COMMERCIAL USE, AND ALL USE BY FOR PROFIT ENTITIES, IS EXPRESSLY
 # PROHIBITED WITHOUT A LICENSE FROM SIMPLESCALAR, LLC (info@simplescalar.com).
-# 
+#
 # 4. No nonprofit user may place any restrictions on the use of this software,
 # including as modified by the user, by any other authorized user.
-# 
+#
 # 5. Noncommercial and nonprofit users may distribute copies of SimpleScalar
 # in compiled or executable form as set forth in Section 2, provided that
 # either: (A) it is accompanied by the corresponding machine-readable source
@@ -39,11 +39,11 @@
 # must permit verbatim duplication by anyone, or (C) it is distributed by
 # someone who received only the executable form, and is accompanied by a
 # copy of the written offer of source code.
-# 
+#
 # 6. SimpleScalar was developed by Todd M. Austin, Ph.D. The tool suite is
 # currently maintained by SimpleScalar LLC (info@simplescalar.com). US Mail:
 # 2395 Timbercrest Court, Ann Arbor, MI 48105.
-# 
+#
 # Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
 #
 
@@ -98,6 +98,8 @@ LEXT = a
 EEXT =
 CS = ;
 X=/
+BUILDDIR = build
+BINDIR = bin
 
 ##
 ## Solaris 2.6, GNU GCC version 2.7.2.3
@@ -299,17 +301,21 @@ HDRS =	syscall.h memory.h regs.h sim.h loader.h cache.h bpred.h ptrace.h \
 #
 # common objects
 #
-OBJS =	main.$(OEXT) syscall.$(OEXT) memory.$(OEXT) regs.$(OEXT) \
-	loader.$(OEXT) endian.$(OEXT) dlite.$(OEXT) symbol.$(OEXT) \
-	eval.$(OEXT) options.$(OEXT) stats.$(OEXT) eio.$(OEXT) \
-	range.$(OEXT) misc.$(OEXT) machine.$(OEXT)
+OBJS =	$(BUILDDIR)/main.$(OEXT) $(BUILDDIR)/syscall.$(OEXT) \
+	$(BUILDDIR)/memory.$(OEXT) $(BUILDDIR)/regs.$(OEXT) \
+	$(BUILDDIR)/loader.$(OEXT) $(BUILDDIR)/endian.$(OEXT) \
+	$(BUILDDIR)/dlite.$(OEXT) $(BUILDDIR)/symbol.$(OEXT) \
+	$(BUILDDIR)/eval.$(OEXT) $(BUILDDIR)/options.$(OEXT) \
+	$(BUILDDIR)/stats.$(OEXT) $(BUILDDIR)/eio.$(OEXT) \
+	$(BUILDDIR)/range.$(OEXT) $(BUILDDIR)/misc.$(OEXT) \
+	$(BUILDDIR)/machine.$(OEXT)
 
 #
 # programs to build
 #
-PROGS = sim-fast$(EEXT) sim-safe$(EEXT) sim-eio$(EEXT) \
-	sim-bpred$(EEXT) sim-profile$(EEXT) \
-	sim-cache$(EEXT) sim-outorder$(EEXT) # sim-cheetah$(EEXT)
+PROGS = $(BINDIR)/sim-fast$(EEXT) $(BINDIR)/sim-safe$(EEXT) $(BINDIR)/sim-eio$(EEXT) \
+	$(BINDIR)/sim-bpred$(EEXT) $(BINDIR)/sim-profile$(EEXT) \
+	$(BINDIR)/sim-cache$(EEXT) $(BINDIR)/sim-outorder$(EEXT) # $(BINDIR)/sim-cheetah$(EEXT)
 
 #
 # all targets, NOTE: library ordering is important...
@@ -371,29 +377,29 @@ sysprobe$(EEXT):	sysprobe.c
 	@echo probe flags: $(MFLAGS)
 	@echo probe libs: $(MLIBS)
 
-sim-fast$(EEXT):	sysprobe$(EEXT) sim-fast.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-fast$(EEXT) $(CFLAGS) sim-fast.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-fast$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-fast.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-fast$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-fast.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-safe$(EEXT):	sysprobe$(EEXT) sim-safe.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-safe$(EEXT) $(CFLAGS) sim-safe.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-safe$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-safe.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-safe$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-safe.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-profile$(EEXT):	sysprobe$(EEXT) sim-profile.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-profile$(EEXT) $(CFLAGS) sim-profile.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-profile$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-profile.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-profile$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-profile.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-eio$(EEXT):	sysprobe$(EEXT) sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-eio$(EEXT) $(CFLAGS) sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-eio$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-eio$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-bpred$(EEXT):	sysprobe$(EEXT) sim-bpred.$(OEXT) bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-bpred$(EEXT) $(CFLAGS) sim-bpred.$(OEXT) bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-bpred$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-bpred$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-cheetah$(EEXT):	sysprobe$(EEXT) sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT)
-	$(CC) -o sim-cheetah$(EEXT) $(CFLAGS) sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-cheetah$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-cheetah$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-cache$(EEXT):	sysprobe$(EEXT) sim-cache.$(OEXT) cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-cache$(EEXT) $(CFLAGS) sim-cache.$(OEXT) cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-cache$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-cache.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-cache$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-cache.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-sim-outorder$(EEXT):	sysprobe$(EEXT) sim-outorder.$(OEXT) cache.$(OEXT) bpred.$(OEXT) resource.$(OEXT) ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT)
-	$(CC) -o sim-outorder$(EEXT) $(CFLAGS) sim-outorder.$(OEXT) cache.$(OEXT) bpred.$(OEXT) resource.$(OEXT) ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-outorder$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-outorder$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
 exo libexo/libexo.$(LEXT): sysprobe$(EEXT)
 	cd libexo $(CS) \
@@ -403,8 +409,14 @@ cheetah libcheetah/libcheetah.$(LEXT): sysprobe$(EEXT)
 	cd libcheetah $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "CC=$(CC)" "AR=$(AR)" "AROPT=$(AROPT)" "RANLIB=$(RANLIB)" "CFLAGS=$(MFLAGS) $(FFLAGS) $(OFLAGS)" "OEXT=$(OEXT)" "LEXT=$(LEXT)" "EEXT=$(EEXT)" "X=$(X)" "RM=$(RM)" libcheetah.$(LEXT)
 
-.c.$(OEXT):
-	$(CC) $(CFLAGS) -c $*.c
+$(BUILDDIR)/%.$(OEXT): %.c | $(BUILDDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILDDIR):
+	mkdir -p $(BUILDDIR)
+
+$(BINDIR):
+	mkdir -p $(BINDIR)
 
 filelist:
 	@echo $(SRCS) $(HDRS) Makefile
@@ -420,42 +432,43 @@ diffs:
 sim-tests sim-tests-nt: sysprobe$(EEXT) $(PROGS)
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-fast$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-fast$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" $(CS) \
 	cd ..
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-safe$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-safe$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" $(CS) \
 	cd ..
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-cache$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-cache$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" $(CS) \
 	cd ..
 	#cd tests $(CS) \
 	#$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-	#	"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-cheetah$(EEXT)" \
+	#	"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-cheetah$(EEXT)" \
 	#	"X=$(X)" "CS=$(CS)" $(CS) \
 	#cd ..
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-bpred$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-bpred$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" $(CS) \
 	cd ..
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-profile$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-profile$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" "SIM_OPTS=-all" $(CS) \
 	cd ..
 	cd tests $(CS) \
 	$(MAKE) "MAKE=$(MAKE)" "RM=$(RM)" "ENDIAN=$(_ENDIAN)" tests \
-		"DIFF=$(DIFF)" "SIM_DIR=.." "SIM_BIN=sim-outorder$(EEXT)" \
+		"DIFF=$(DIFF)" "SIM_DIR=../$(BINDIR)" "SIM_BIN=sim-outorder$(EEXT)" \
 		"X=$(X)" "CS=$(CS)" $(CS) \
 	cd ..
 
 clean:
-	-$(RM) *.o *.obj *.exe core *~ MAKE.log Makefile.bak sysprobe$(EEXT) $(PROGS)
+	-$(RM) *.exe core *~ MAKE.log Makefile.bak sysprobe$(EEXT)
+	-rm -rf $(BUILDDIR) $(BINDIR)
 	#cd libcheetah $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..
 	cd libexo $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..
 	cd tests-alpha $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..
