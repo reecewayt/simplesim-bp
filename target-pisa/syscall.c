@@ -2,20 +2,20 @@
 
 /* SimpleScalar(TM) Tool Suite
  * Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
- * All Rights Reserved. 
- * 
+ * All Rights Reserved.
+ *
  * THIS IS A LEGAL DOCUMENT, BY USING SIMPLESCALAR,
  * YOU ARE AGREEING TO THESE TERMS AND CONDITIONS.
- * 
+ *
  * No portion of this work may be used by any commercial entity, or for any
  * commercial purpose, without the prior, written permission of SimpleScalar,
  * LLC (info@simplescalar.com). Nonprofit and noncommercial use is permitted
  * as described below.
- * 
+ *
  * 1. SimpleScalar is provided AS IS, with no warranty of any kind, express
  * or implied. The user of the program accepts full responsibility for the
  * application of the program and the use of any results.
- * 
+ *
  * 2. Nonprofit and noncommercial use is encouraged. SimpleScalar may be
  * downloaded, compiled, executed, copied, and modified solely for nonprofit,
  * educational, noncommercial research, and noncommercial scholarship
@@ -24,13 +24,13 @@
  * solely for nonprofit, educational, noncommercial research, and
  * noncommercial scholarship purposes provided that this notice in its
  * entirety accompanies all copies.
- * 
+ *
  * 3. ALL COMMERCIAL USE, AND ALL USE BY FOR PROFIT ENTITIES, IS EXPRESSLY
  * PROHIBITED WITHOUT A LICENSE FROM SIMPLESCALAR, LLC (info@simplescalar.com).
- * 
+ *
  * 4. No nonprofit user may place any restrictions on the use of this software,
  * including as modified by the user, by any other authorized user.
- * 
+ *
  * 5. Noncommercial and nonprofit users may distribute copies of SimpleScalar
  * in compiled or executable form as set forth in Section 2, provided that
  * either: (A) it is accompanied by the corresponding machine-readable source
@@ -40,11 +40,11 @@
  * must permit verbatim duplication by anyone, or (C) it is distributed by
  * someone who received only the executable form, and is accompanied by a
  * copy of the written offer of source code.
- * 
+ *
  * 6. SimpleScalar was developed by Todd M. Austin, Ph.D. The tool suite is
  * currently maintained by SimpleScalar LLC (info@simplescalar.com). US Mail:
  * 2395 Timbercrest Court, Ann Arbor, MI 48105.
- * 
+ *
  * Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
  */
 
@@ -150,10 +150,10 @@
 #undef CR0
 #endif
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__linux__)
 #include <termios.h>
 /*#include <sys/ioctl_compat.h>*/
-#else /* !__FreeBSD__ */
+#else /* !__FreeBSD__ && !__APPLE__ && !__linux__ */
 #ifndef _MSC_VER
 #include <termio.h>
 #endif
@@ -771,7 +771,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	/* open the file */
 	/*fd*/regs->regs_R[2] =
 	  open(buf, local_flags, /*mode*/regs->regs_R[6]);
-	
+
 	/* check for an error condition */
 	if (regs->regs_R[2] != -1)
 	  regs->regs_R[7] = 0;
@@ -1234,32 +1234,42 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 #endif
 	}
 
-#if !defined(TIOCGETP) && (defined(linux) || defined(__CYGWIN32__))
+#if !defined(TIOCGETP) && (defined(linux) || defined(__CYGWIN32__) || defined(__APPLE__))
         if (!local_req && /*req*/regs->regs_R[5] == SS_IOCTL_TIOCGETP)
           {
-            struct termios lbuf;
-            struct ss_sgttyb buf;
-
-            /* result */regs->regs_R[2] =
-                          tcgetattr(/* fd */(int)regs->regs_R[4], &lbuf);
-
-            /* translate results */
-            buf.sg_ispeed = lbuf.c_ispeed;
-            buf.sg_ospeed = lbuf.c_ospeed;
-            buf.sg_erase = lbuf.c_cc[VERASE];
-            buf.sg_kill = lbuf.c_cc[VKILL];
-            buf.sg_flags = 0;   /* FIXME: this is wrong... */
-
-            mem_bcopy(mem_fn, mem, Write,
-                      /* buf */regs->regs_R[6], &buf,
-                      sizeof(struct ss_sgttyb));
-
-            if (regs->regs_R[2] != -1)
-              regs->regs_R[7] = 0;
-            else /* probably not a typewriter, return details */
+            /* if program output is redirected, report not-a-tty so that
+               isatty() correctly returns false in the simulated program */
+            if (sim_progfd)
               {
-                regs->regs_R[2] = errno;
+                regs->regs_R[2] = ENOTTY;
                 regs->regs_R[7] = 1;
+              }
+            else
+              {
+                struct termios lbuf;
+                struct ss_sgttyb buf;
+
+                /* result */regs->regs_R[2] =
+                              tcgetattr(/* fd */(int)regs->regs_R[4], &lbuf);
+
+                /* translate results */
+                buf.sg_ispeed = lbuf.c_ispeed;
+                buf.sg_ospeed = lbuf.c_ospeed;
+                buf.sg_erase = lbuf.c_cc[VERASE];
+                buf.sg_kill = lbuf.c_cc[VKILL];
+                buf.sg_flags = 0;   /* FIXME: this is wrong... */
+
+                mem_bcopy(mem_fn, mem, Write,
+                          /* buf */regs->regs_R[6], &buf,
+                          sizeof(struct ss_sgttyb));
+
+                if (regs->regs_R[2] != -1)
+                  regs->regs_R[7] = 0;
+                else /* probably not a typewriter, return details */
+                  {
+                    regs->regs_R[2] = errno;
+                    regs->regs_R[7] = 1;
+                  }
               }
           }
         else
@@ -1316,7 +1326,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	    if (regs->regs_R[2] != -1)
 	      regs->regs_R[7] = 0;
 	    else
-	      {	
+	      {
 		/* got an error, return details */
 		regs->regs_R[2] = errno;
 		regs->regs_R[7] = 1;
@@ -1729,7 +1739,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	mem_bcopy(mem_fn, mem, Write, /*rusage*/regs->regs_R[5],
 		  &rusage, sizeof(struct ss_rusage));
       }
-#elif defined(__unix__) || defined(unix)
+#elif defined(__unix__) || defined(unix) || defined(__APPLE__)
       {
 	struct rusage local_rusage;
 	struct ss_rusage rusage;
@@ -1867,7 +1877,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 #elif defined(_MSC_VER)
 	    /* no utimes() in MSC, use utime() instead */
 	    /*result*/regs->regs_R[2] = utime(buf, NULL);
-#elif defined(__svr4__) || defined(__USLC__) || defined(unix) || defined(_AIX) || defined(__alpha)
+#elif defined(__svr4__) || defined(__USLC__) || defined(unix) || defined(_AIX) || defined(__alpha) || defined(__APPLE__)
 	    /*result*/regs->regs_R[2] = utimes(buf, NULL);
 #elif defined(__CYGWIN32__)
 	    warn("syscall: called utimes()\n");
@@ -1914,7 +1924,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 
 	      /* result */regs->regs_R[2] = utime(buf, &ubuf);
 	    }
-#elif defined(__USLC__) || defined(unix) || defined(_AIX) || defined(__alpha)
+#elif defined(__USLC__) || defined(unix) || defined(_AIX) || defined(__alpha) || defined(__APPLE__)
 	    /* result */regs->regs_R[2] = utimes(buf, tval);
 #elif defined(__CYGWIN32__)
 	    warn("syscall: called utimes()\n");

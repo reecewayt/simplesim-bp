@@ -2,20 +2,20 @@
 
 /* SimpleScalar(TM) Tool Suite
  * Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
- * All Rights Reserved. 
- * 
+ * All Rights Reserved.
+ *
  * THIS IS A LEGAL DOCUMENT, BY USING SIMPLESCALAR,
  * YOU ARE AGREEING TO THESE TERMS AND CONDITIONS.
- * 
+ *
  * No portion of this work may be used by any commercial entity, or for any
  * commercial purpose, without the prior, written permission of SimpleScalar,
  * LLC (info@simplescalar.com). Nonprofit and noncommercial use is permitted
  * as described below.
- * 
+ *
  * 1. SimpleScalar is provided AS IS, with no warranty of any kind, express
  * or implied. The user of the program accepts full responsibility for the
  * application of the program and the use of any results.
- * 
+ *
  * 2. Nonprofit and noncommercial use is encouraged. SimpleScalar may be
  * downloaded, compiled, executed, copied, and modified solely for nonprofit,
  * educational, noncommercial research, and noncommercial scholarship
@@ -24,13 +24,13 @@
  * solely for nonprofit, educational, noncommercial research, and
  * noncommercial scholarship purposes provided that this notice in its
  * entirety accompanies all copies.
- * 
+ *
  * 3. ALL COMMERCIAL USE, AND ALL USE BY FOR PROFIT ENTITIES, IS EXPRESSLY
  * PROHIBITED WITHOUT A LICENSE FROM SIMPLESCALAR, LLC (info@simplescalar.com).
- * 
+ *
  * 4. No nonprofit user may place any restrictions on the use of this software,
  * including as modified by the user, by any other authorized user.
- * 
+ *
  * 5. Noncommercial and nonprofit users may distribute copies of SimpleScalar
  * in compiled or executable form as set forth in Section 2, provided that
  * either: (A) it is accompanied by the corresponding machine-readable source
@@ -40,11 +40,11 @@
  * must permit verbatim duplication by anyone, or (C) it is distributed by
  * someone who received only the executable form, and is accompanied by a
  * copy of the written offer of source code.
- * 
+ *
  * 6. SimpleScalar was developed by Todd M. Austin, Ph.D. The tool suite is
  * currently maintained by SimpleScalar LLC (info@simplescalar.com). US Mail:
  * 2395 Timbercrest Court, Ann Arbor, MI 48105.
- * 
+ *
  * Copyright (C) 1994-2003 by Todd M. Austin, Ph.D. and SimpleScalar, LLC.
  */
 
@@ -187,6 +187,8 @@ int getdirentries(int fd, char *buf, int nbytes, long *basep);
 #ifdef __FreeBSD__
 #include <termios.h>
 /*#include <sys/ioctl_compat.h>*/
+#elif defined(__linux__) || defined(__APPLE__)
+#include <termios.h>
 #else
 #ifndef _MSC_VER
 #include <termio.h>
@@ -897,7 +899,7 @@ struct xlate_table_t socktype_map[] =
 
 /* OSF table() call. Right now, we only support TBL_SYSINFO queries */
 #define OSF_TBL_SYSINFO		12
-struct osf_tbl_sysinfo 
+struct osf_tbl_sysinfo
 {
   long si_user;		/* user time */
   long si_nice;		/* nice time */
@@ -945,7 +947,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	  struct osf_sigcontext sc;
 	  md_addr_t sc_addr = regs->regs_R[MD_REG_A0];
 
-	  mem_bcopy(mem_fn, mem, Read, sc_addr, 
+	  mem_bcopy(mem_fn, mem, Read, sc_addr,
 		    &sc, sizeof(struct osf_sigcontext));
 	  regs->regs_NPC = sc.sc_pc;
 	  for (i=0; i < 32; ++i)
@@ -1144,7 +1146,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	mem_bcopy(mem_fn, mem, Read, /* serv_addr */regs->regs_R[MD_REG_A1],
 		  buf, /* addrlen */(int)regs->regs_R[MD_REG_A2]);
 
-	if (regs->regs_R[MD_REG_A5] > 0) 
+	if (regs->regs_R[MD_REG_A5] > 0)
 	  mem_bcopy(mem_fn, mem, Read, regs->regs_R[MD_REG_A4],
 		    &d_sock, (int)regs->regs_R[MD_REG_A5]);
 
@@ -1171,7 +1173,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	    regs->regs_R[MD_REG_V0] = errno;
 	  }
 
-	if (buf != NULL) 
+	if (buf != NULL)
 	  free(buf);
       }
       break;
@@ -1185,7 +1187,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	unsigned addr_len;
 	char *buf;
 	struct sockaddr *a_sock;
-      
+
 	buf = (char *) malloc(sizeof(char)*regs->regs_R[MD_REG_A2]);
 
 	mem_bcopy(mem_fn, mem, Read, /* serv_addr */regs->regs_R[MD_REG_A1],
@@ -1252,7 +1254,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	/* open the file */
 	/*fd*/regs->regs_R[MD_REG_V0] =
 	  open(buf, local_flags, /*mode*/regs->regs_R[MD_REG_A2]);
-	
+
 	/* check for an error condition */
 	if (regs->regs_R[MD_REG_V0] != (qword_t)-1)
 	  regs->regs_R[MD_REG_A3] = 0;
@@ -1887,7 +1889,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	    if (regs->regs_R[MD_REG_V0] != (qword_t)-1)
 	      regs->regs_R[7] = 0;
 	    else
-	      {	
+	      {
 		/* got an error, return details */
 		regs->regs_R[MD_REG_V0] = errno;
 		regs->regs_R[7] = 1;
@@ -1966,12 +1968,12 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
       {
 	qword_t table_id, table_index, buf_addr, num_elem;
 	struct osf_tbl_sysinfo sysinfo;
-	
+
 	table_id = regs->regs_R[MD_REG_A1];
 	table_index = regs->regs_R[MD_REG_A2];
 	buf_addr = regs->regs_R[MD_REG_A3];
 	num_elem = regs->regs_R[MD_REG_A4];
-	
+
 	switch(table_id)
 	{
 	case OSF_TBL_SYSINFO:
@@ -1988,7 +1990,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	  else
 	    {
 	      struct rusage rusage_info;
-	      
+
 	      /* use getrusage() to determine user & system time */
 	      if (getrusage(RUSAGE_SELF, &rusage_info) < 0)
 		{
@@ -1999,14 +2001,14 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 		  regs->regs_R[MD_REG_V0] = errno;
 		  break;
 		}
-	      
+
 	      /* use sysconf() to determine clock tick frequency */
 	      sysinfo.si_hz = sysconf(_SC_CLK_TCK);
 
 	      /* convert user and system time into clock ticks */
-	      sysinfo.si_user = rusage_info.ru_utime.tv_sec * sysinfo.si_hz + 
+	      sysinfo.si_user = rusage_info.ru_utime.tv_sec * sysinfo.si_hz +
 		(rusage_info.ru_utime.tv_usec * sysinfo.si_hz) / 1000000UL;
-	      sysinfo.si_sys = rusage_info.ru_stime.tv_sec * sysinfo.si_hz + 
+	      sysinfo.si_sys = rusage_info.ru_stime.tv_sec * sysinfo.si_hz +
 		(rusage_info.ru_stime.tv_usec * sysinfo.si_hz) / 1000000UL;
 
 	      /* following can't be determined in a portable manner and
@@ -2538,8 +2540,8 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 
 	/* for some reason, __sigaction expects A3 to have a 0 return value */
 	regs->regs_R[MD_REG_A3] = 0;
-  
-	/* FIXME: still need to add code so that on a signal, the 
+
+	/* FIXME: still need to add code so that on a signal, the
 	   correct action is actually taken. */
 
 	/* FIXME: still need to add support for returning the correct
@@ -2582,12 +2584,12 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 
     case OSF_SYS_uswitch:
       warn("unsupported uswitch() call...");
-      regs->regs_R[MD_REG_V0] = regs->regs_R[MD_REG_A1]; 
+      regs->regs_R[MD_REG_V0] = regs->regs_R[MD_REG_A1];
       break;
 
     case OSF_SYS_setsysinfo:
       warn("unsupported setsysinfo() call...");
-      regs->regs_R[MD_REG_V0] = 0; 
+      regs->regs_R[MD_REG_V0] = 0;
       break;
 
 #if !defined(MIN_SYSCALL_MODE)
@@ -3039,7 +3041,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	    buf = calloc(1, /* optlen */(size_t)regs->regs_R[MD_REG_A4]);
 	    if (!buf)
 	      fatal("cannot allocate memory in OSF_SYS_setsockopt");
-	    
+
 	    /* copy target side pointer data into host side vector */
 	    mem_bcopy(mem_fn, mem, Read,
 		      /* optval */regs->regs_R[MD_REG_A3],
@@ -3114,7 +3116,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	  }
 	else
 	  buf = NULL;
-	
+
 	/* result */regs->regs_R[MD_REG_V0] =
 	  getsockname(/* sock */(int)regs->regs_R[MD_REG_A0],
 		      /* name */(struct sockaddr *)buf,
@@ -3166,7 +3168,7 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
 	  }
 	else
 	  buf = NULL;
-	
+
 	/* result */regs->regs_R[MD_REG_V0] =
 	  getpeername(/* sock */(int)regs->regs_R[MD_REG_A0],
 		      /* name */(struct sockaddr *)buf,
@@ -3462,10 +3464,10 @@ sys_syscall(struct regs_t *regs,	/* registers to access */
         }
 #if 0
       warn("unsupported usleep_thread() call...");
-      regs->regs_R[MD_REG_V0] = 0; 
+      regs->regs_R[MD_REG_V0] = 0;
 #endif
       break;
-      
+
 #if !defined(MIN_SYSCALL_MODE)
     case OSF_SYS_gethostname:
       /* get program scheduling priority */
