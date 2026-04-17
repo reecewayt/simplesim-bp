@@ -1,0 +1,17 @@
+branch prediction notes: note line 4288 sim-outorder.c
+
+sim_check_options called from main: line 355
+	sim-outorder.c line 879 sim_check_options: creates branch predictor module and assigns settings
+		bpred.c calls bpred_create() line: 906 bpred_create is a case statement which loads the appopriate parameters. Another case will have to be added for a custom bp
+sim_load_regs called from main: line 385
+	sim-outorder.c line 1298 sim_reg_stats: creates variables for data collection
+	bpred.c calls bpred_reg_stats: creates variables for all stats collected on the branch predictor. Will have to be modified to support custom bp(i.e another case)
+sim_main called from main: line 417
+	sim-outorder.c calls ruu_fetch every cycle: line 4587
+	ruu_fetch calls bpred lookup
+		bpred.c bpred lookup calls bpred_dir_lookup line 586
+	ruu_commit calls bpred update
+		bpred.c bpred_update trains counters and updates statistics after branch resolution 
+		
+
+	

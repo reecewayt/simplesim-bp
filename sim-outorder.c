@@ -910,6 +910,11 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
       /* static predictor, taken */
       pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
+  else if (!mystricmp(pred_type, "custom"))
+    {
+      /* static predictor, taken */
+      pred = bpred_create(BPredCustom, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
   else if (!mystricmp(pred_type, "bimod"))
     {
       /* bimodal predictor, bpred_create() checks BTB_SIZE */
