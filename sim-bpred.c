@@ -256,6 +256,11 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
 			  /* btb assoc */btb_config[1],
 			  /* ret-addr stack size */ras_size);
     }
+  else if (!mystricmp(pred_type, "custom"))
+    {
+      /* static predictor, taken */
+      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
   else
     fatal("cannot parse predictor type `%s'", pred_type);
 }

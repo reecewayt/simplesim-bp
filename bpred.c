@@ -110,9 +110,9 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
 
   case BPredTaken:
   case BPredNotTaken:
+  case BPredCustom:
     /* no other state */
     break;
-
   default:
     panic("bogus predictor class");
   }
@@ -166,6 +166,7 @@ bpred_create(enum bpred_class class,	/* type of predictor to create */
 
   case BPredTaken:
   case BPredNotTaken:
+  case BPredCustom:
     /* no other state */
     break;
 
@@ -253,9 +254,11 @@ bpred_dir_create (
 
   case BPredTaken:
   case BPredNotTaken:
+  case BPredCustom:
     /* no other state */
     break;
-
+ 
+    /* user-defined predictor, static configuration to start */
   default:
     panic("bogus branch direction predictor class");
   }
@@ -289,6 +292,10 @@ bpred_dir_config(
 
   case BPredNotTaken:
     fprintf(stream, "pred_dir: %s: predict not taken\n", name);
+    break;
+  
+  case BPredCustom:
+    fprintf(stream, "pred_dir: %s: user-defined predictor(taken)\n", name);
     break;
 
   default:
@@ -331,7 +338,9 @@ bpred_config(struct bpred_t *pred,	/* branch predictor instance */
   case BPredNotTaken:
     bpred_dir_config (pred->dirpred.bimod, "nottaken", stream);
     break;
-
+  case BPredCustom:
+    bpred_dir_config (pred->dirpred.bimod, "custom", stream);
+    break;
   default:
     panic("bogus branch predictor class");
   }
@@ -372,6 +381,9 @@ bpred_reg_stats(struct bpred_t *pred,	/* branch predictor instance */
       break;
     case BPredNotTaken:
       name = "bpred_nottaken";
+      break;
+    case BPredCustom:
+      name = "bpred_custom";
       break;
     default:
       panic("bogus branch predictor class");
@@ -535,6 +547,7 @@ bpred_dir_lookup(struct bpred_dir_t *pred_dir,	/* branch dir predictor inst */
       break;
     case BPredTaken:
     case BPredNotTaken:
+    case BPredCustom:
       break;
     default:
       panic("bogus branch direction predictor class");
@@ -627,6 +640,10 @@ bpred_lookup(struct bpred_t *pred,	/* branch predictor instance */
 	{
 	  return btarget;
 	}
+
+    case BPredCustom:
+      return btarget;
+
     default:
       panic("bogus predictor class");
   }
@@ -805,7 +822,7 @@ bpred_update(struct bpred_t *pred,	/* branch predictor instance */
     }
 
   /* Can exit now if this is a stateless predictor */
-  if (pred->class == BPredNotTaken || pred->class == BPredTaken)
+  if (pred->class == BPredNotTaken || pred->class == BPredTaken || pred->class == BPredCustom)
     return;
 
   /* 
