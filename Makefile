@@ -389,8 +389,8 @@ $(BINDIR)/sim-profile$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-profile.$(OEXT) $(
 $(BINDIR)/sim-eio$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
 	$(CC) -o $(BINDIR)/sim-eio$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-eio.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-$(BINDIR)/sim-bpred$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
-	$(CC) -o $(BINDIR)/sim-bpred$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-bpred$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) tage/tests/tage.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-bpred$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-bpred.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) tage/tests/tage.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
 $(BINDIR)/sim-cheetah$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT) | $(BINDIR)
 	$(CC) -o $(BINDIR)/sim-cheetah$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-cheetah.$(OEXT) $(OBJS) libcheetah/libcheetah.$(LEXT) libexo/libexo.$(LEXT) $(MLIBS)
@@ -398,8 +398,8 @@ $(BINDIR)/sim-cheetah$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-cheetah.$(OEXT) $(
 $(BINDIR)/sim-cache$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-cache.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
 	$(CC) -o $(BINDIR)/sim-cache$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-cache.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
-$(BINDIR)/sim-outorder$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
-	$(CC) -o $(BINDIR)/sim-outorder$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
+$(BINDIR)/sim-outorder$(EEXT):	sysprobe$(EEXT) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) tage/tests/tage.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) | $(BINDIR)
+	$(CC) -o $(BINDIR)/sim-outorder$(EEXT) $(CFLAGS) $(BUILDDIR)/sim-outorder.$(OEXT) $(BUILDDIR)/cache.$(OEXT) $(BUILDDIR)/bpred.$(OEXT) $(BUILDDIR)/resource.$(OEXT) $(BUILDDIR)/ptrace.$(OEXT) tage/tests/tage.$(OEXT) $(OBJS) libexo/libexo.$(LEXT) $(MLIBS)
 
 exo libexo/libexo.$(LEXT): sysprobe$(EEXT)
 	cd libexo $(CS) \
@@ -410,6 +410,9 @@ cheetah libcheetah/libcheetah.$(LEXT): sysprobe$(EEXT)
 	$(MAKE) "MAKE=$(MAKE)" "CC=$(CC)" "AR=$(AR)" "AROPT=$(AROPT)" "RANLIB=$(RANLIB)" "CFLAGS=$(MFLAGS) $(FFLAGS) $(OFLAGS)" "OEXT=$(OEXT)" "LEXT=$(LEXT)" "EEXT=$(EEXT)" "X=$(X)" "RM=$(RM)" libcheetah.$(LEXT)
 
 $(BUILDDIR)/%.$(OEXT): %.c | $(BUILDDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+tage/tests/tage.$(OEXT): tage/tests/tage.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILDDIR):
