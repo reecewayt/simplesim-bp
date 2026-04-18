@@ -97,6 +97,11 @@ static int comb_nelt = 1;
 static int comb_config[1] =
   { /* meta_table_size */1024 };
 
+/* TAGE predictor config (<table_size>) */
+static int tage_nelt = 1;
+static int tage_config[1] =
+  { /* base table size */4096 };
+
 /* return address stack (RAS) size */
 static int ras_size = 8;
 
@@ -146,7 +151,7 @@ sim_reg_options(struct opt_odb_t *odb)
 	       /* print */TRUE, /* format */NULL);
 
   opt_reg_string(odb, "-bpred",
-		 "branch predictor type {nottaken|taken|bimod|2lev|comb}",
+		 "branch predictor type {nottaken|taken|bimod|2lev|comb|tage}",
                  &pred_type, /* default */"bimod",
                  /* print */TRUE, /* format */NULL);
 
@@ -167,6 +172,12 @@ sim_reg_options(struct opt_odb_t *odb)
 		   "combining predictor config (<meta_table_size>)",
 		   comb_config, comb_nelt, &comb_nelt,
 		   /* default */comb_config,
+		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
+  opt_reg_int_list(odb, "-bpred:tage",
+		   "TAGE predictor config (<table_size>)",
+		   tage_config, tage_nelt, &tage_nelt,
+		   /* default */tage_config,
 		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
 
   opt_reg_int(odb, "-bpred:ras",
@@ -256,10 +267,24 @@ sim_check_options(struct opt_odb_t *odb, int argc, char **argv)
 			  /* btb assoc */btb_config[1],
 			  /* ret-addr stack size */ras_size);
     }
-  else if (!mystricmp(pred_type, "custom"))
+  else if (!mystricmp(pred_type, "tage"))
     {
-      /* static predictor, taken */
-      pred = bpred_create(BPredTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      /* TAGE predictor, bpred_create() checks args */
+      if (tage_nelt != 1)
+	fatal("bad TAGE predictor config (<table_size>)");
+      if (btb_nelt != 2)
+	fatal("bad btb config (<num_sets> <associativity>)");
+
+      pred = bpred_create(BPredTage,
+			  /* bimod table size */tage_config[0],
+			  /* 2lev l1 size */0,
+			  /* 2lev l2 size */0,
+			  /* meta table size */0,
+			  /* history reg size */0,
+			  /* history xor address */0,
+			  /* btb sets */btb_config[0],
+			  /* btb assoc */btb_config[1],
+			  /* ret-addr stack size */ras_size);
     }
   else
     fatal("cannot parse predictor type `%s'", pred_type);

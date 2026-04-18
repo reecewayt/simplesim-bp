@@ -136,6 +136,11 @@ static int btb_nelt = 2;
 static int btb_config[2] =
   { /* nsets */512, /* assoc */4 };
 
+/* TAGE predictor config (<table_size>) */
+static int tage_nelt = 1;
+static int tage_config[1] =
+  { /* base table size */4096 };
+
 /* instruction decode B/W (insts/cycle) */
 static int ruu_decode_width;
 
@@ -650,7 +655,7 @@ sim_reg_options(struct opt_odb_t *odb)
                );
 
   opt_reg_string(odb, "-bpred",
-		 "branch predictor type {nottaken|taken|perfect|bimod|2lev|comb}",
+		 "branch predictor type {nottaken|taken|perfect|bimod|2lev|comb|tage}",
                  &pred_type, /* default */"bimod",
                  /* print */TRUE, /* format */NULL);
 
@@ -673,6 +678,12 @@ sim_reg_options(struct opt_odb_t *odb)
 		   /* default */comb_config,
 		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
 
+  opt_reg_int_list(odb, "-bpred:tage",
+		   "TAGE predictor config (<base_table_size>)",
+		   tage_config, tage_nelt, &tage_nelt,
+		   /* default */tage_config,
+		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
   opt_reg_int(odb, "-bpred:ras",
               "return address stack size (0 for no return stack)",
               &ras_size, /* default */ras_size,
@@ -689,6 +700,7 @@ sim_reg_options(struct opt_odb_t *odb)
 		 &bpred_spec_opt, /* default */NULL,
 		 /* print */TRUE, /* format */NULL);
 
+  
   /* decode options */
 
   opt_reg_int(odb, "-decode:width",
@@ -910,11 +922,6 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
       /* static predictor, taken */
       pred = bpred_create(BPredNotTaken, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
-  else if (!mystricmp(pred_type, "custom"))
-    {
-      /* static predictor, taken */
-      pred = bpred_create(BPredCustom, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    }
   else if (!mystricmp(pred_type, "bimod"))
     {
       /* bimodal predictor, bpred_create() checks BTB_SIZE */
@@ -977,6 +984,25 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 			  /* btb assoc */btb_config[1],
 			  /* ret-addr stack size */ras_size);
     }
+  else if (!mystricmp(pred_type, "tage"))
+    {
+      /* TAGE predictor, bpred_create() checks args */
+      if (tage_nelt != 1)
+    fatal("bad TAGE predictor config (<base_table_size>)");
+      if (btb_nelt != 2)
+    fatal("bad btb config (<num_sets> <associativity>)"); 
+
+      pred = bpred_create(BPredTage,
+              /* base table size */tage_config[0],
+              /* l1 size */0,
+              /* l2 size */0,
+              /* meta table size */0,
+              /* history reg size */0,
+              /* history xor address */0,
+              /* btb sets */btb_config[0],
+              /* btb assoc */btb_config[1],
+              /* ret-addr stack size */ras_size);
+    }      
   else
     fatal("cannot parse predictor type `%s'", pred_type);
 
