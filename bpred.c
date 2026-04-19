@@ -57,7 +57,6 @@
 #include "misc.h"
 #include "machine.h"
 #include "bpred.h"
-#include "tage/tests/tage.h"
 
 /* turn this on to enable the SimpleScalar 2.0 RAS bug */
 /* #define RAS_BUG_COMPATIBLE */
@@ -114,9 +113,10 @@ bpred_create(enum bpred_class class,     /* type of predictor to create */
     break;
 
   case BPredTage:
+    /* TAGE predictor, without table 0 */
     pred->dirpred.tage =
-        bpred_dir_create(class, TAGE_BASE_TABLE_SIZE, 0, 0, 0);
-    /* Also initialize bimodal as table 0 for TAGE */
+        bpred_dir_create(BPredTage, 0, 0, 0, 0);
+    /* initialize bimodal as table 0 for TAGE */
     pred->dirpred.bimod =
         bpred_dir_create(BPred2bit, TAGE_BASE_TABLE_SIZE, 0, 0, 0);
     break;
@@ -268,27 +268,12 @@ bpred_dir_create(
     break;
 
   case BPredTage:
-    /* 0th table bimodal config*/
-    if (!l1size || (l1size & (l1size - 1)) != 0)
-      fatal("2bit table size, `%d', must be non-zero and a power of two",
-            l1size);
-    pred_dir->config.bimod.size = l1size;
-    if (!(pred_dir->config.bimod.table =
-              calloc(l1size, sizeof(unsigned char))))
-      fatal("cannot allocate 2bit storage");
-    /* initialize counters to weakly this-or-that */
-    flipflop = 1;
-    for (cnt = 0; cnt < l1size; cnt++)
-    {
-      pred_dir->config.bimod.table[cnt] = flipflop;
-      flipflop = 3 - flipflop;
-    }
-
+    /* TAGE predictor, without table 0 */
     int i; // loop variable
     int j; // loop variable
 
     pred_dir->config.tage.num_tables = NUM_TAGE_TABLES;
-    pred_dir->config.tage.base_table_size = l1size;
+    pred_dir->config.tage.base_table_size = TAGE_BASE_TABLE_SIZE;
     pred_dir->config.tage.tagged_table_size = TAGE_TAGGED_TABLE_SIZE;
 
     if (!(pred_dir->config.tage.hist_lengths = calloc(NUM_TAGE_TABLES - 1, sizeof(int))))
@@ -700,14 +685,19 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
       return btarget;
     }
 
+  /* This Section implments the lookup algorithm described by Michaud, Pierre. (2005). A PPM-like, tag-based branch predictor.
+   Journal of Instruction-Level Parallelism. 7. 1-10. Section 2.  The Tage predictor accesses all of its tables
+   in parallel each one providing a prediction. Then the predictor selects the longest matching history. On a miss the
+   bimodal is used or table 0. Structurally this design will return a Null pointer if no matching history is found in tables 1-4.
+   Then the bimodal table 0 is used as a fallback. NOTE: in the cbp1.5 predictor the bimodal counter is 3 bits. This
+   implementation leverages the existing architecture for a 2 bit bimodal counter.  See lines 775-805*/
   case BPredTage:
     if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) != (F_CTRL | F_UNCOND))
     {
-      /* Try TAGE lookup first */
-      dir_update_ptr->pdir1 = bpred_dir_lookup_tage(pred->dirpred.tage, baddr);
+      /* Try TAGE lookup tables 1-4 fist*/
+      dir_update_ptr->ptage = bpred_dir_lookup_tage(pred->dirpred.tage, baddr);
       /* If TAGE returns NULL, use bimodal table 0 */
-      if (!dir_update_ptr->pdir1)
-        dir_update_ptr->pdir1 = bpred_dir_lookup(pred->dirpred.bimod, baddr);
+      dir_update_ptr->pdir1 = bpred_dir_lookup(pred->dirpred.bimod, baddr);
     }
     break;
 
@@ -786,16 +776,36 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
   if (pbtb == NULL)
   {
     /* BTB miss -- just return a predicted direction */
-    return ((*(dir_update_ptr->pdir1) >= 2)
-                ? /* taken */ 1
-                : /* not taken */ 0);
+    if (dir_update_ptr->dir.tage != NULL)
+    {
+      /* TAGE prediction (3-bit counters, threshold >= 4) */
+      return ((*(dir_update_ptr->ptage) >= 4)
+                  ? /* taken */ 1
+                  : /* not taken */ 0);
+    }
+    else
+    { /* bimodal prediction (2-bit counters, threshold >= 2) */
+      return ((*(dir_update_ptr->pdir1) >= 2)
+                  ? /* taken */ 1
+                  : /* not taken */ 0);
+    }
   }
   else
   {
     /* BTB hit, so return target if it's a predicted-taken branch */
-    return ((*(dir_update_ptr->pdir1) >= 2)
-                ? /* taken */ pbtb->target
-                : /* not taken */ 0);
+    if (dir_update_ptr->dir.tage != NULL)
+    {
+      /* TAGE prediction (3-bit counters, threshold >= 4) */
+      return ((*(dir_update_ptr->ptage) >= 4)
+                  ? /* taken */ pbtb->target
+                  : /* not taken */ 0);
+    }
+    else
+    { /* bimodal prediction (2-bit counters, threshold >= 2) */
+      return ((*(dir_update_ptr->pdir1) >= 2)
+                  ? /* taken */ pbtb->target
+                  : /* not taken */ 0);
+    }
   }
 }
 
@@ -889,12 +899,19 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
   if (pred->class == BPredNotTaken || pred->class == BPredTaken)
     return;
 
-  /* update the TAGE predictor */
-  if(dir_update_ptr->dir.tage)
-    bpred_dir_update_tage(pred->dirpred.tage, baddr, btarget, taken, pred_taken, dir_update_ptr->ptage);
-  
-    //Falls through to update table 0 (bimodal) for TAGE predictor, and also update 2-level and meta tables for combining predictor
-  
+  /* update the TAGE predictor */ 
+  if (dir_update_ptr->dir.tage)
+    bpred_dir_update_tage(pred->dirpred.tage,
+                          baddr,
+                          btarget, 
+                          taken,
+                          pred_taken, 
+                          dir_update_ptr->ptage);
+
+  // Falls through to update table 0 (bimodal) for TAGE predictor,
+  // and also update 2-level and meta tables for combining predictor
+  // if they exist.
+
   /*
    * Now we know the branch didn't use the ret-addr stack, and that this
    * is a stateful predictor

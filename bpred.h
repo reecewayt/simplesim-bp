@@ -60,7 +60,7 @@
 #include "misc.h"
 #include "machine.h"
 #include "stats.h"
-
+#include "tage/tests/tage.h"
 /*
  * This module implements a number of branch predictor mechanisms.  The
  * following predictors are supported:
