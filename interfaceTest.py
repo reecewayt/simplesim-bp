@@ -58,7 +58,6 @@ class bpredTest(unittest.TestCase):
                       "bpred_{}.misses".format(bpred_type)]
         mismatches = []
         percent_diff = []
-        dir_miss_stats = []
         for key in dut_stats:
                 dut_key = f"bpred_{bpred_type}.{'.'.join(key.split('.')[1:])}"
                 ref_key = f"bpred_{ref_type}.{'.'.join(key.split('.')[1:])}"
@@ -74,11 +73,6 @@ class bpredTest(unittest.TestCase):
                                        / float(ref_stats[ref_key]) * 100)) 
                                       if ref_stats[ref_key] != 0 else float('inf')])
         
-        if(dut_dir_miss_stats):
-            for dut_miss, ref_miss in zip(dut_dir_miss_stats, ref_dir_miss_stats):
-                dir_miss_stats.append([f"PC: {dut_miss[0]} actual: {dut_miss[1]} predicted: {dut_miss[2]}",
-                                           f"PC: {ref_miss[0]} actual: {ref_miss[1]} predicted: {ref_miss[2]}"])
-
         if mismatches:
             mismatch_table = tabulate(mismatches, 
                         headers=["Stat Mismatch", f"DUT ({bpred_type})", f"Reference ({ref_type})"],
@@ -89,15 +83,18 @@ class bpredTest(unittest.TestCase):
             crit_table = tabulate(percent_diff,
                         headers=["Critical Stat", "Percent Difference"],
                         tablefmt="grid")
-            jr_miss_table = tabulate(dir_miss_stats,
-                         headers=[f"DUT ({bpred_type})",
-                         f"Reference ({ref_type})"],
-                         tablefmt="grid") 
             
-            self.fail("\n *-----------------Configuration------------------*\n" + config_table +
+            # Build output with DIR_MISS counts
+            output = ("\n *-----------------Configuration------------------*\n" + config_table +
                       "\n *-----------------Mismatches---------------------*\n" + mismatch_table +
-                      "\n *-----------------Critical Stats-----------------*\n" + crit_table +
-                      ("\n *----------------Unconditional Branch Misses----*\n" + jr_miss_table if dir_miss_stats else ""))
+                      "\n *-----------------Critical Stats-----------------*\n" + crit_table)
+            
+            dut_count = len(dut_dir_miss_stats) if dut_dir_miss_stats else 0
+            ref_count = len(ref_dir_miss_stats) if ref_dir_miss_stats else 0
+            if dut_count > 0 or ref_count > 0:
+                output += f"\n *-----------Unconditional Branch Misses----------*\nDUT: {dut_count} | Reference: {ref_count}"
+            
+            self.fail(output)
         return True
     
     def compare_bpred_stats_expected(self, dut_stats, ref_stats, bpred_type,ref_type="taken"):

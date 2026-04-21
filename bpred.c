@@ -908,9 +908,10 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
   else{
     pred->misses++;
     
-    if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND))
+    if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND)){
     fprintf(stderr, "DIR_MISS: PC=0x%x actual=%d predicted=%d\n",
           (unsigned)baddr, taken, pred_taken);
+    }
     }
   if (dir_update_ptr->dir.ras)
   {
