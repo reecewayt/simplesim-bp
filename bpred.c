@@ -299,6 +299,41 @@ bpred_dir_create(
       fatal("cannot allocate TAGE usefulness array");
     if (!(pred_dir->config.tage.meta = calloc(NUM_TAGE_TABLES - 4, sizeof(unsigned char *))))
       fatal("cannot allocate TAGE meta array");
+
+    for (i = 0; i < NUM_TAGE_TABLES - 1; i++)
+    {
+      if (!(pred_dir->config.tage.counters[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
+        fatal("cannot allocate TAGE counters table");
+      if (i > 0) // no tags or usefulness bits for base table
+      {
+        if (!(pred_dir->config.tage.tags[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
+          fatal("cannot allocate TAGE tags table");
+        if (!(pred_dir->config.tage.usefulness[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
+          fatal("cannot allocate TAGE usefulness table");
+      }
+      if (i == 0) // meta predictor is only for base table
+      {
+        if (!(pred_dir->config.tage.meta[0] = calloc(pred_dir->config.tage.base_table_size, sizeof(unsigned char))))
+          fatal("cannot allocate TAGE meta table");
+      }
+    }
+
+    /* All used memory to 0 */
+    for (i = 0; i < NUM_TAGE_TABLES - 1; i++)
+    {
+      memset(pred_dir->config.tage.counters[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
+      if (i > 0)
+      {
+        memset(pred_dir->config.tage.tags[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
+        memset(pred_dir->config.tage.usefulness[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
+      }
+      if (i == 0)
+      {
+        memset(pred_dir->config.tage.meta[0], 0, pred_dir->config.tage.base_table_size * sizeof(unsigned char));
+      }
+    }
+
+
     break;
 
   default:
@@ -696,6 +731,12 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
     {
       /* Try TAGE lookup tables 1-4 fist*/
       dir_update_ptr->ptage = bpred_dir_lookup_tage(pred->dirpred.tage, baddr);
+      
+      if(dir_update_ptr->ptage != NULL)
+        dir_update_ptr->dir.tage = TRUE; /* TAGE hit */
+      else
+        dir_update_ptr->dir.tage = FALSE; /* TAGE miss */
+      
       /* If TAGE returns NULL, use bimodal table 0 */
       dir_update_ptr->pdir1 = bpred_dir_lookup(pred->dirpred.bimod, baddr);
     }
@@ -767,16 +808,23 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
    */
 
   /* if this is a jump, ignore predicted direction; we know it's taken. */
+  /*NOTE: There is potentially a bug here if the BTB entry is NULL and the jump is unconditional while
+  running sim-bpred with the TAGE predictor. In sim-bpred.c the lookup function returns an address of 1 in this case. Then the stats recorded
+  by bpred_update may be incorrect because [edge case] the prediction is considered incorrect because the target address is unavailable.
+  See how the prediction is considered correct in sim-bpred 551. In order to fix this you can replace the 1 with the btarget. 
+  However I have avoided doing this because I cannot be sure that will not have a wider impact. -Arie Jorritsma */ 
+
   if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND))
   {
-    return (pbtb ? pbtb->target : 1);
+    return (pbtb ? pbtb->target : 1); 
+    
   }
 
   /* otherwise we have a conditional branch */
   if (pbtb == NULL)
   {
     /* BTB miss -- just return a predicted direction */
-    if (dir_update_ptr->dir.tage != NULL)
+    if (dir_update_ptr->ptage != NULL)
     {
       /* TAGE prediction (3-bit counters, threshold >= 4) */
       return ((*(dir_update_ptr->ptage) >= 4)
@@ -793,7 +841,7 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
   else
   {
     /* BTB hit, so return target if it's a predicted-taken branch */
-    if (dir_update_ptr->dir.tage != NULL)
+    if (dir_update_ptr->ptage != NULL)
     {
       /* TAGE prediction (3-bit counters, threshold >= 4) */
       return ((*(dir_update_ptr->ptage) >= 4)
@@ -857,9 +905,13 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
 
   if (!!pred_taken == !!taken)
     pred->dir_hits++;
-  else
+  else{
     pred->misses++;
-
+    
+    if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND))
+    fprintf(stderr, "DIR_MISS: PC=0x%x actual=%d predicted=%d\n",
+          (unsigned)baddr, taken, pred_taken);
+    }
   if (dir_update_ptr->dir.ras)
   {
     pred->used_ras++;
@@ -900,8 +952,7 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
     return;
 
   /* update the TAGE predictor */ 
-  if (dir_update_ptr->dir.tage)
-    bpred_dir_update_tage(pred->dirpred.tage,
+   bpred_dir_update_tage(pred->dirpred.tage,
                           baddr,
                           btarget, 
                           taken,

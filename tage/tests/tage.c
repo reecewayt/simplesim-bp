@@ -15,12 +15,12 @@ unsigned char *p = NULL;
 
 #ifdef TAGE_TAKEN
   pred_dir->config.tage.counters[0][0] = 7; // predict taken with high confidence always
-  p = pred_dir->config.tage.counters[0];
+  p = &pred_dir->config.tage.counters[0][0];
 #endif
 
 #ifdef TAGE_NOT_TAKEN
   pred_dir->config.tage.counters[0][0] = 0; // predict not taken with high confidence always
-  p = pred_dir->config.tage.counters[0];
+  p = &pred_dir->config.tage.counters[0][0];
 #endif
 
   return p;

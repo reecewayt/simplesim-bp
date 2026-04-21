@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include "../../machine.h"
 
-struct bpred_dir_t; 
+struct bpred_dir_t;
 
 char * bpred_dir_lookup_tage(struct bpred_dir_t *pred_dir, md_addr_t baddr); // returns pointer to prediction counter for TAGE predictor
 

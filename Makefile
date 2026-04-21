@@ -100,7 +100,7 @@ CS = ;
 X=/
 BUILDDIR = build
 BINDIR = bin
-
+TAGE_FLAG = -DTAGE_BIMOD
 ##
 ## Solaris 2.6, GNU GCC version 2.7.2.3
 ##
@@ -413,7 +413,7 @@ $(BUILDDIR)/%.$(OEXT): %.c | $(BUILDDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 tage/tests/tage.$(OEXT): tage/tests/tage.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $(TAGE_FLAG) $< -o $@
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
@@ -472,6 +472,7 @@ sim-tests sim-tests-nt: sysprobe$(EEXT) $(PROGS)
 clean:
 	-$(RM) *.exe core *~ MAKE.log Makefile.bak sysprobe$(EEXT)
 	-rm -rf $(BUILDDIR) $(BINDIR)
+	-$(RM) tage/tests/tage.$(OEXT)
 	#cd libcheetah $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..
 	cd libexo $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..
 	cd tests-alpha $(CS) $(MAKE) "RM=$(RM)" "CS=$(CS)" clean $(CS) cd ..

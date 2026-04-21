@@ -224,6 +224,11 @@ static int res_fpalu;
 /* total number of floating point multiplier/dividers available */
 static int res_fpmult;
 
+/*Speculative Execution Stats*/
+static counter_t total_mispred_squashes = 0;
+static counter_t total_spec_insts = 0;
+static counter_t total_spec_branches = 0;
+
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
 static int pcstat_nelt = 0;
@@ -1474,7 +1479,17 @@ sim_load_prog(char *fname,		/* program to load */
 void
 sim_aux_stats(FILE *stream)             /* output stream */
 {
-  /* nada */
+  fprintf(stream, "\nSpeculative Execution Stats:\n");
+  fprintf(stream, "  Total speculative instructions: %llu\n", total_spec_insts);
+  fprintf(stream, "  Total speculative branches: %llu\n", total_spec_branches);
+  fprintf(stream, "  Total mispredicted squashes: %llu\n", total_mispred_squashes);
+
+  fprintf(stream, "avg_spec_insts_per_branch: %.2f\n",
+    (total_spec_branches > 0) ?
+    ((double)total_spec_insts / total_spec_branches) : 0.0);
+  fprintf(stream, "avg_spec_branches_per_squash: %.2f\n",
+    (total_mispred_squashes > 0) ?
+    ((double)total_spec_branches / total_mispred_squashes) : 0.0);
 }
 
 /* un-initialize the simulator */
@@ -2316,7 +2331,6 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
 {
   int i, RUU_index = RUU_tail, LSQ_index = LSQ_tail;
   int RUU_prev_tail = RUU_tail, LSQ_prev_tail = LSQ_tail;
-
   /* recover from the tail of the RUU towards the head until the branch index
      is reached, this direction ensures that the LSQ can be synchronized with
      the RUU */
@@ -2328,7 +2342,13 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
   /* traverse to older insts until the mispredicted branch is encountered */
   while (RUU_index != branch_index)
     {
-      /* the RUU should not drain since the mispredicted branch will remain */
+
+      /* update speculative execution stats */
+      total_spec_insts++;
+      if(MD_OP_FLAGS(RUU[RUU_index].op) & F_CTRL)
+	      total_spec_branches++;
+      
+        /* the RUU should not drain since the mispredicted branch will remain */
       if (!RUU_num)
 	panic("empty RUU");
 
@@ -2382,6 +2402,9 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
       RUU_index = (RUU_index + (RUU_size-1)) % RUU_size;
       RUU_num--;
     }
+
+  /* update mispredicted squash stats */
+  total_mispred_squashes++;
 
   /* reset head/tail pointers to point to the mis-predicted branch */
   RUU_tail = RUU_prev_tail;
