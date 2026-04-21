@@ -22,7 +22,7 @@ unsigned char *p = NULL;
   pred_dir->config.tage.counters[0][0] = 0; // predict not taken with high confidence always
   p = &pred_dir->config.tage.counters[0][0];
 #endif
-
+  //stuff TODO: put a tage predictor here
   return p;
 }
 
@@ -33,7 +33,7 @@ bpred_dir_update_tage(struct bpred_dir_t *pred_dir, md_addr_t baddr,
                       char *dir_update_ptr)
 {
 
-  //stuff
+  //stuff TODO: update the tage predictor here
   return 0;
 }
 

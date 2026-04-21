@@ -83,8 +83,6 @@ class bpredTest(unittest.TestCase):
             crit_table = tabulate(percent_diff,
                         headers=["Critical Stat", "Percent Difference"],
                         tablefmt="grid")
-            
-            # Build output with DIR_MISS counts
             output = ("\n *-----------------Configuration------------------*\n" + config_table +
                       "\n *-----------------Mismatches---------------------*\n" + mismatch_table +
                       "\n *-----------------Critical Stats-----------------*\n" + crit_table)
