@@ -1,1 +1,2 @@
-wheel==0.45.1
+numpy==2.4.4
+tabulate==0.10.0
