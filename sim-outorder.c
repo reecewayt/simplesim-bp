@@ -136,6 +136,11 @@ static int btb_nelt = 2;
 static int btb_config[2] =
   { /* nsets */512, /* assoc */4 };
 
+/* TAGE predictor config (<table_size>) */
+static int tage_nelt = 1;
+static int tage_config[1] =
+  { /* base table size */4096 };
+
 /* instruction decode B/W (insts/cycle) */
 static int ruu_decode_width;
 
@@ -218,6 +223,11 @@ static int res_fpalu;
 
 /* total number of floating point multiplier/dividers available */
 static int res_fpmult;
+
+/*Speculative Execution Stats*/
+static counter_t total_mispred_squashes = 0;
+static counter_t total_spec_insts = 0;
+static counter_t total_spec_branches = 0;
 
 /* text-based stat profiles */
 #define MAX_PCSTAT_VARS 8
@@ -650,7 +660,7 @@ sim_reg_options(struct opt_odb_t *odb)
                );
 
   opt_reg_string(odb, "-bpred",
-		 "branch predictor type {nottaken|taken|perfect|bimod|2lev|comb}",
+		 "branch predictor type {nottaken|taken|perfect|bimod|2lev|comb|tage}",
                  &pred_type, /* default */"bimod",
                  /* print */TRUE, /* format */NULL);
 
@@ -673,6 +683,12 @@ sim_reg_options(struct opt_odb_t *odb)
 		   /* default */comb_config,
 		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
 
+  opt_reg_int_list(odb, "-bpred:tage",
+		   "TAGE predictor config (<base_table_size>)",
+		   tage_config, tage_nelt, &tage_nelt,
+		   /* default */tage_config,
+		   /* print */TRUE, /* format */NULL, /* !accrue */FALSE);
+
   opt_reg_int(odb, "-bpred:ras",
               "return address stack size (0 for no return stack)",
               &ras_size, /* default */ras_size,
@@ -689,6 +705,7 @@ sim_reg_options(struct opt_odb_t *odb)
 		 &bpred_spec_opt, /* default */NULL,
 		 /* print */TRUE, /* format */NULL);
 
+  
   /* decode options */
 
   opt_reg_int(odb, "-decode:width",
@@ -972,6 +989,25 @@ sim_check_options(struct opt_odb_t *odb,        /* options database */
 			  /* btb assoc */btb_config[1],
 			  /* ret-addr stack size */ras_size);
     }
+  else if (!mystricmp(pred_type, "tage"))
+    {
+      /* TAGE predictor, bpred_create() checks args */
+      if (tage_nelt != 1)
+    fatal("bad TAGE predictor config (<base_table_size>)");
+      if (btb_nelt != 2)
+    fatal("bad btb config (<num_sets> <associativity>)"); 
+
+      pred = bpred_create(BPredTage,
+              /* base table size */tage_config[0],
+              /* l1 size */0,
+              /* l2 size */0,
+              /* meta table size */0,
+              /* history reg size */0,
+              /* history xor address */0,
+              /* btb sets */btb_config[0],
+              /* btb assoc */btb_config[1],
+              /* ret-addr stack size */ras_size);
+    }      
   else
     fatal("cannot parse predictor type `%s'", pred_type);
 
@@ -1443,7 +1479,17 @@ sim_load_prog(char *fname,		/* program to load */
 void
 sim_aux_stats(FILE *stream)             /* output stream */
 {
-  /* nada */
+  fprintf(stream, "\nSpeculative Execution Stats:\n");
+  fprintf(stream, "  Total speculative instructions: %llu\n", total_spec_insts);
+  fprintf(stream, "  Total speculative branches: %llu\n", total_spec_branches);
+  fprintf(stream, "  Total mispredicted squashes: %llu\n", total_mispred_squashes);
+
+  fprintf(stream, "avg_spec_insts_per_branch: %.2f\n",
+    (total_spec_branches > 0) ?
+    ((double)total_spec_insts / total_spec_branches) : 0.0);
+  fprintf(stream, "avg_spec_branches_per_squash: %.2f\n",
+    (total_mispred_squashes > 0) ?
+    ((double)total_spec_branches / total_mispred_squashes) : 0.0);
 }
 
 /* un-initialize the simulator */
@@ -2285,7 +2331,6 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
 {
   int i, RUU_index = RUU_tail, LSQ_index = LSQ_tail;
   int RUU_prev_tail = RUU_tail, LSQ_prev_tail = LSQ_tail;
-
   /* recover from the tail of the RUU towards the head until the branch index
      is reached, this direction ensures that the LSQ can be synchronized with
      the RUU */
@@ -2297,7 +2342,13 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
   /* traverse to older insts until the mispredicted branch is encountered */
   while (RUU_index != branch_index)
     {
-      /* the RUU should not drain since the mispredicted branch will remain */
+
+      /* update speculative execution stats */
+      total_spec_insts++;
+      if(MD_OP_FLAGS(RUU[RUU_index].op) & F_CTRL)
+	      total_spec_branches++;
+      
+        /* the RUU should not drain since the mispredicted branch will remain */
       if (!RUU_num)
 	panic("empty RUU");
 
@@ -2351,6 +2402,9 @@ ruu_recover(int branch_index)			/* index of mis-pred branch */
       RUU_index = (RUU_index + (RUU_size-1)) % RUU_size;
       RUU_num--;
     }
+
+  /* update mispredicted squash stats */
+  total_mispred_squashes++;
 
   /* reset head/tail pointers to point to the mis-predicted branch */
   RUU_tail = RUU_prev_tail;

@@ -14,3 +14,4 @@ sysprobe
 tage/tests/run_*
 tage/tests/**/*.dSYM
 .clangd
+venv/
