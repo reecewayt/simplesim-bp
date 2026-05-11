@@ -333,7 +333,6 @@ bpred_dir_create(
       }
     }
 
-
     break;
 
   default:
@@ -713,7 +712,7 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
   case BPredNotTaken:
     if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) != (F_CTRL | F_UNCOND))
     {
-      return baddr + sizeof(md_inst_t);
+      return baddr + sizeof(md_inst_t); 
     }
     else
     {
@@ -731,12 +730,12 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
     {
       /* Try TAGE lookup tables 1-4 fist*/
       dir_update_ptr->ptage = bpred_dir_lookup_tage(pred->dirpred.tage, baddr);
-      
-      if(dir_update_ptr->ptage != NULL)
+
+      if (dir_update_ptr->ptage != NULL)
         dir_update_ptr->dir.tage = TRUE; /* TAGE hit */
       else
         dir_update_ptr->dir.tage = FALSE; /* TAGE miss */
-      
+
       /* If TAGE returns NULL, use bimodal table 0 */
       dir_update_ptr->pdir1 = bpred_dir_lookup(pred->dirpred.bimod, baddr);
     }
@@ -811,13 +810,12 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
   /*NOTE: There is potentially a bug here if the BTB entry is NULL and the jump is unconditional while
   running sim-bpred with the TAGE predictor. In sim-bpred.c the lookup function returns an address of 1 in this case. Then the stats recorded
   by bpred_update may be incorrect because [edge case] the prediction is considered incorrect because the target address is unavailable.
-  See how the prediction is considered correct in sim-bpred 551. In order to fix this you can replace the 1 with the btarget. 
-  However I have avoided doing this because I cannot be sure that will not have a wider impact. -Arie Jorritsma */ 
+  See how the prediction is considered correct in sim-bpred 551. In order to fix this you can replace the 1 with the btarget.
+  However I have avoided doing this because I cannot be sure that will not have a wider impact. -Arie Jorritsma */
 
   if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND))
   {
-    return (pbtb ? pbtb->target : 1); 
-    
+    return (pbtb ? pbtb->target : 1);
   }
 
   /* otherwise we have a conditional branch */
@@ -905,14 +903,10 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
 
   if (!!pred_taken == !!taken)
     pred->dir_hits++;
-  else{
+  else
+  {
     pred->misses++;
-    
-    if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND)){
-    fprintf(stderr, "DIR_MISS: PC=0x%x actual=%d predicted=%d\n",
-          (unsigned)baddr, taken, pred_taken);
-    }
-    }
+  }
   if (dir_update_ptr->dir.ras)
   {
     pred->used_ras++;
@@ -952,13 +946,13 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
   if (pred->class == BPredNotTaken || pred->class == BPredTaken)
     return;
 
-  /* update the TAGE predictor */ 
-   bpred_dir_update_tage(pred->dirpred.tage,
-                          baddr,
-                          btarget, 
-                          taken,
-                          pred_taken, 
-                          dir_update_ptr->ptage);
+  /* update the TAGE predictor */
+  bpred_dir_update_tage(pred->dirpred.tage,
+                        baddr,
+                        btarget,
+                        taken,
+                        pred_taken,
+                        dir_update_ptr->ptage);
 
   // Falls through to update table 0 (bimodal) for TAGE predictor,
   // and also update 2-level and meta tables for combining predictor
