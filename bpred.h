@@ -60,7 +60,7 @@
 #include "misc.h"
 #include "machine.h"
 #include "stats.h"
-#include "tage/tests/tage.h"
+#include "tage/tage.h"
 /*
  * This module implements a number of branch predictor mechanisms.  The
  * following predictors are supported:
@@ -141,6 +141,8 @@ struct bpred_dir_t
     struct
     {
       /* Tage Parameters       Defaults:              */
+      // TODO: Add ability to configure table size and
+      // hist_lengths. For now these are hard coded for simplicity
       int num_tables;       /* 5 (1 bimodal + 4 tagged) */
       int base_table_size;        /* 4k for bank 0 */
       int tagged_table_size;      /* 1k for banks 1-4 */
