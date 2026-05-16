@@ -113,12 +113,9 @@ bpred_create(enum bpred_class class,     /* type of predictor to create */
     break;
 
   case BPredTage:
-    /* TAGE predictor, without table 0 */
     pred->dirpred.tage =
         bpred_dir_create(BPredTage, 0, 0, 0, 0);
-    /* initialize bimodal as table 0 for TAGE */
-    pred->dirpred.bimod =
-        bpred_dir_create(BPred2bit, TAGE_BASE_TABLE_SIZE, 0, 0, 0);
+
     break;
 
   default:
@@ -268,7 +265,7 @@ bpred_dir_create(
     break;
 
   case BPredTage:
-    /* TAGE predictor, without table 0 */
+    /* TAGE predictor: T0 base bimodal (base_table) + T1-T4 tagged tables */
     int i; // loop variable
     int j; // loop variable
 
@@ -291,6 +288,19 @@ bpred_dir_create(
 
     pred_dir->config.tage.global_history = 0; // initialize global history to 0
 
+    /* allocate and initialise T0 base bimodal (3-bit saturating counters,
+     * range 0-7, taken iff >= 4 — same threshold as T1-T4 tagged tables) */
+    if (!(pred_dir->config.tage.base_table =
+              calloc(TAGE_BASE_TABLE_SIZE, sizeof(unsigned char))))
+      fatal("cannot allocate TAGE base table");
+
+    for (cnt = 0; cnt < TAGE_BASE_TABLE_SIZE; cnt++)
+      pred_dir->config.tage.base_table[cnt] = 3; /* TAGE_CTR_WEAKLY_NOTTAKEN */
+
+    //Initialize tables for tag, counters, usefulness, and meta
+    // these are 2D arrays (i.e. counters[table][entry], tags[table][entry], etc...)
+
+    // Outer pointers such that we have pointers to each row or table of data
     if (!(pred_dir->config.tage.counters = calloc(NUM_TAGE_TABLES - 1, sizeof(unsigned char *))))
       fatal("cannot allocate TAGE counters array");
     if (!(pred_dir->config.tage.tags = calloc(NUM_TAGE_TABLES - 1, sizeof(unsigned char *))))
@@ -300,33 +310,29 @@ bpred_dir_create(
     if (!(pred_dir->config.tage.meta = calloc(NUM_TAGE_TABLES - 4, sizeof(unsigned char *))))
       fatal("cannot allocate TAGE meta array");
 
+
+    // allocate arrays for each table (T1-T4 at indices 0-3; all are tagged)
     for (i = 0; i < NUM_TAGE_TABLES - 1; i++)
     {
       if (!(pred_dir->config.tage.counters[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
         fatal("cannot allocate TAGE counters table");
-      if (i > 0) // no tags or usefulness bits for base table
-      {
-        if (!(pred_dir->config.tage.tags[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
-          fatal("cannot allocate TAGE tags table");
-        if (!(pred_dir->config.tage.usefulness[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
-          fatal("cannot allocate TAGE usefulness table");
-      }
-      if (i == 0) // meta predictor is only for base table
+      if (!(pred_dir->config.tage.tags[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
+        fatal("cannot allocate TAGE tags table");
+      if (!(pred_dir->config.tage.usefulness[i] = calloc(pred_dir->config.tage.tagged_table_size, sizeof(unsigned char))))
+        fatal("cannot allocate TAGE usefulness table");
+      if (i == 0) // meta predictor is only for T1
       {
         if (!(pred_dir->config.tage.meta[0] = calloc(pred_dir->config.tage.base_table_size, sizeof(unsigned char))))
           fatal("cannot allocate TAGE meta table");
       }
     }
 
-    /* All used memory to 0 */
+    /* All used memory to 0 for initial state */
     for (i = 0; i < NUM_TAGE_TABLES - 1; i++)
     {
       memset(pred_dir->config.tage.counters[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
-      if (i > 0)
-      {
-        memset(pred_dir->config.tage.tags[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
-        memset(pred_dir->config.tage.usefulness[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
-      }
+      memset(pred_dir->config.tage.tags[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
+      memset(pred_dir->config.tage.usefulness[i], 0, pred_dir->config.tage.tagged_table_size * sizeof(unsigned char));
       if (i == 0)
       {
         memset(pred_dir->config.tage.meta[0], 0, pred_dir->config.tage.base_table_size * sizeof(unsigned char));
@@ -623,7 +629,9 @@ bpred_dir_lookup(struct bpred_dir_t *pred_dir, /* branch dir predictor inst */
     break;
 
   case BPredTage:
-    p = &pred_dir->config.bimod.table[BIMOD_HASH(pred_dir, baddr)];
+    /* Important: bpred_dir_lookup is not used for TAGE; bpred_lookup calls
+     * bpred_dir_lookup_tage() directly.  Reaching here is a bug. */
+    panic("bpred_dir_lookup: called for BPredTage; use bpred_dir_lookup_tage");
     break;
 
   default:
@@ -720,25 +728,16 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
       return btarget;
     }
 
-  /* This Section implments the lookup algorithm described by Michaud, Pierre. (2005). A PPM-like, tag-based branch predictor.
-   Journal of Instruction-Level Parallelism. 7. 1-10. Section 2.  The Tage predictor accesses all of its tables
-   in parallel each one providing a prediction. Then the predictor selects the longest matching history. On a miss the
-   bimodal is used or table 0. Structurally this design will return a Null pointer if no matching history is found in tables 1-4.
-   Then the bimodal table 0 is used as a fallback. NOTE: in the cbp1.5 predictor the bimodal counter is 3 bits. This
-   implementation leverages the existing architecture for a 2 bit bimodal counter.  See lines 775-805*/
+  /* TAGE: PPM-like tag-based predictor.  T0 bimodal is now managed internally
+   * by tage.c (config.tage.base_table); bpred_dir_lookup_tage always returns a
+   * valid pointer — it falls back to T0 if no tagged table matches. */
   case BPredTage:
     if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) != (F_CTRL | F_UNCOND))
     {
-      /* Try TAGE lookup tables 1-4 fist*/
       dir_update_ptr->ptage = bpred_dir_lookup_tage(pred->dirpred.tage, baddr);
-      
-      if(dir_update_ptr->ptage != NULL)
-        dir_update_ptr->dir.tage = TRUE; /* TAGE hit */
-      else
-        dir_update_ptr->dir.tage = FALSE; /* TAGE miss */
-      
-      /* If TAGE returns NULL, use bimodal table 0 */
-      dir_update_ptr->pdir1 = bpred_dir_lookup(pred->dirpred.bimod, baddr);
+      if (!dir_update_ptr->ptage)
+        panic("bpred_lookup: bpred_dir_lookup_tage returned NULL (should always fall back to T0)");
+      dir_update_ptr->dir.tage = TRUE;
     }
     break;
 
@@ -811,13 +810,13 @@ bpred_lookup(struct bpred_t *pred,                  /* branch predictor instance
   /*NOTE: There is potentially a bug here if the BTB entry is NULL and the jump is unconditional while
   running sim-bpred with the TAGE predictor. In sim-bpred.c the lookup function returns an address of 1 in this case. Then the stats recorded
   by bpred_update may be incorrect because [edge case] the prediction is considered incorrect because the target address is unavailable.
-  See how the prediction is considered correct in sim-bpred 551. In order to fix this you can replace the 1 with the btarget. 
-  However I have avoided doing this because I cannot be sure that will not have a wider impact. -Arie Jorritsma */ 
+  See how the prediction is considered correct in sim-bpred 551. In order to fix this you can replace the 1 with the btarget.
+  However I have avoided doing this because I cannot be sure that will not have a wider impact. -Arie Jorritsma */
 
   if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND))
   {
-    return (pbtb ? pbtb->target : 1); 
-    
+    return (pbtb ? pbtb->target : 1);
+
   }
 
   /* otherwise we have a conditional branch */
@@ -907,7 +906,7 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
     pred->dir_hits++;
   else{
     pred->misses++;
-    
+
     if ((MD_OP_FLAGS(op) & (F_CTRL | F_UNCOND)) == (F_CTRL | F_UNCOND)){
     fprintf(stderr, "DIR_MISS: PC=0x%x actual=%d predicted=%d\n",
           (unsigned)baddr, taken, pred_taken);
@@ -952,17 +951,17 @@ void bpred_update(struct bpred_t *pred,                  /* branch predictor ins
   if (pred->class == BPredNotTaken || pred->class == BPredTaken)
     return;
 
-  /* update the TAGE predictor */ 
-   bpred_dir_update_tage(pred->dirpred.tage,
+  /* update the TAGE predictor (only when TAGE is active) */
+  if (pred->class == BPredTage && pred->dirpred.tage != NULL)
+    bpred_dir_update_tage(pred->dirpred.tage,
                           baddr,
-                          btarget, 
+                          btarget,
                           taken,
-                          pred_taken, 
+                          pred_taken,
                           dir_update_ptr->ptage);
 
-  // Falls through to update table 0 (bimodal) for TAGE predictor,
-  // and also update 2-level and meta tables for combining predictor
-  // if they exist.
+  // Also update 2-level and meta tables for combining predictor if they exist.
+  // (T0 bimodal for TAGE is updated internally by bpred_dir_update_tage.)
 
   /*
    * Now we know the branch didn't use the ret-addr stack, and that this

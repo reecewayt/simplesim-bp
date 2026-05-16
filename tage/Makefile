@@ -4,6 +4,10 @@ CFLAGS    = -std=c99 -Wall -Wextra -g -I. -I..
 UNITY_DIR = tests/unity
 UNITY_URL = https://raw.githubusercontent.com/ThrowTheSwitch/Unity/master/src
 
+# test_tage.c #includes tage.c directly to stay self-contained, so SRCS
+# must be empty here (adding tage.c would cause duplicate-symbol errors).
+# The tage.o target below compiles tage.c for linking into SimpleScalar.
+SRCS      =
 
 # Auto-discover every tests/test_*.c file.
 # To add a new test suite, just create tests/test_<name>.c.
@@ -72,8 +76,8 @@ tests/sample/run_sample: tests/sample/main.c | check-unity
 # ─────────────────────────────────────────────
 # Object for linking into SimpleScalar
 # ─────────────────────────────────────────────
-tage.o: $(SRCS)
-	$(CC) $(CFLAGS) -c -o $@ $(SRCS)
+tage.o: tage.c
+	$(CC) $(CFLAGS) -c -o $@ tage.c
 
 .PHONY: clean
 clean:
