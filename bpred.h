@@ -151,6 +151,7 @@ struct bpred_dir_t
 
       uint64_t global_history; /* 64-bit register */
 
+      unsigned char  *base_table;  /* T0: 2-bit bimodal counters [base_table_size] */
       unsigned char **counters;   /* 3-bit prediction counters [table 1-4][entry] */
       unsigned char **tags;       /* 8-bit tags [table 1-4][entry] */
       unsigned char **usefulness; /* 1-bit useful bits [table 1-4][entry] */

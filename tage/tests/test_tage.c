@@ -70,7 +70,7 @@
 #define T_TAG_WIDTH         8
 #define T_HISTORY_REG_SIZE  64
 #define T_N_TAGGED          4   /* num_tables - 1 */
-#define T_UNTAGGED_IDX      0   /* T1: no tags, hist_len = 8 */
+#define T_UNTAGGED_IDX      0   /* T1 index (hist_len = 8); T1 is now a tagged table */
 
 static const int T_HIST_LENGTHS[T_N_TAGGED] = { 8, 16, 32, 64 };
 
@@ -85,6 +85,7 @@ typedef struct {
     int           *hist_lengths;
     int            geometric_factor;
     uint64_t       global_history;
+    unsigned char  *base_table;   /* T0 bimodal – must follow global_history to match bpred.h */
     unsigned char **counters;
     unsigned char **tags;
     unsigned char **usefulness;
@@ -123,6 +124,11 @@ typedef char _layout_assert[
 
 /* md_addr_t – matches host.h: typedef unsigned int word_t; machine.h: typedef word_t md_addr_t; */
 typedef unsigned int md_addr_t;
+
+/* MD_BR_SHIFT – log2 of minimum branch alignment (machine.h = 3 for PISA) */
+#ifndef MD_BR_SHIFT
+#define MD_BR_SHIFT 3
+#endif
 
 /*
  * Declare struct bpred_dir_t as an alias for our mock struct.
@@ -173,6 +179,12 @@ alloc_mock_pred(void)
     p->config.tage.geometric_factor  = 2;
     p->config.tage.global_history    = 0;
 
+    /* base table (T0): 3-bit saturating counters (0-7, taken >= 4), weak-NT init */
+    p->config.tage.base_table = malloc(T_BASE_TABLE_SIZE * sizeof(unsigned char));
+    if (!p->config.tage.base_table) { TEST_FAIL_MESSAGE("malloc failed"); free(p); return NULL; }
+    for (int k = 0; k < T_BASE_TABLE_SIZE; k++)
+        p->config.tage.base_table[k] = 3; /* TAGE_CTR_WEAK_NOTTAKEN */
+
     /* hist_lengths: 4 entries */
     p->config.tage.hist_lengths = calloc(T_N_TAGGED, sizeof(int));
     for (int i = 0; i < T_N_TAGGED; i++)
@@ -187,21 +199,19 @@ alloc_mock_pred(void)
     for (int i = 0; i < T_N_TAGGED; i++) {
         p->config.tage.counters[i] = calloc(T_TAGGED_TABLE_SIZE,
                                             sizeof(unsigned char));
-        if (i > 0) {
-            /*
-             * Initialise tags to 0xFF (sentinel = "no valid entry").
-             * Real bpred_dir_create uses 0 (calloc), but 0 is also a
-             * valid computed tag for many PCs, causing spurious hits.
-             * Tests that need realistic cold-start behaviour use PCs
-             * whose computed tag is non-0xFF, so there are no false hits.
-             */
-            p->config.tage.tags[i] = malloc(T_TAGGED_TABLE_SIZE *
-                                             sizeof(unsigned char));
-            memset(p->config.tage.tags[i], 0xFF,
-                   T_TAGGED_TABLE_SIZE * sizeof(unsigned char));
-            p->config.tage.usefulness[i] = calloc(T_TAGGED_TABLE_SIZE,
-                                                   sizeof(unsigned char));
-        }
+        /*
+         * Initialise tags to 0xFF (sentinel = "no valid entry").
+         * Real bpred_dir_create uses 0 (calloc), but 0 is also a
+         * valid computed tag for many PCs, causing spurious hits.
+         * Tests that need realistic cold-start behaviour use PCs
+         * whose computed tag is non-0xFF, so there are no false hits.
+         */
+        p->config.tage.tags[i] = malloc(T_TAGGED_TABLE_SIZE *
+                                         sizeof(unsigned char));
+        memset(p->config.tage.tags[i], 0xFF,
+               T_TAGGED_TABLE_SIZE * sizeof(unsigned char));
+        p->config.tage.usefulness[i] = calloc(T_TAGGED_TABLE_SIZE,
+                                               sizeof(unsigned char));
         if (i == 0)
             p->config.tage.meta[0] = calloc(T_BASE_TABLE_SIZE,
                                             sizeof(unsigned char));
@@ -218,6 +228,7 @@ free_mock_pred(struct bpred_dir_t *p)
         free(p->config.tage.tags[i]);
         free(p->config.tage.usefulness[i]);
     }
+    free(p->config.tage.base_table);
     free(p->config.tage.meta[0]);
     free(p->config.tage.hist_lengths);
     free(p->config.tage.counters);
@@ -388,7 +399,7 @@ void test_ctr_update_notTaken_decrements(void)
 
 void test_lookup_coldPredictor_returnsNonNull(void)
 {
-    /* Cold predictor: no tagged entries valid, but T1 (untagged) always fires */
+    /* Cold predictor: all tagged tables miss (0xFF sentinel), T0 is the provider */
     char *p = bpred_dir_lookup_tage(g_pred, 0x1000);
     TEST_ASSERT_NOT_NULL(p);
 }
@@ -396,8 +407,9 @@ void test_lookup_coldPredictor_returnsNonNull(void)
 void test_lookup_coldPredictor_predictNotTaken(void)
 {
     /*
-     * Cold counters are 0 (calloc initialises to 0).
-     * Threshold for taken is 4, so 0 → not-taken prediction.
+     * Cold predictor: all tagged tables miss (0xFF sentinel tags), so T0
+     * (base bimodal) is the provider.  base_table is initialised to 3
+     * (TAGE_CTR_WEAK_NOTTAKEN); tage_ctr_pred(3) = 0 = not-taken.
      */
     char *p = bpred_dir_lookup_tage(g_pred, 0x1000);
     TEST_ASSERT_EQUAL_INT(0, tage_ctr_pred((unsigned char)*p));
@@ -500,11 +512,18 @@ void test_update_notTakenBranch_decrementsCounter(void)
      */
     md_addr_t pc = 0x6104;
 
-    /* Plant a counter value of 5 in T1 so we can observe the decrement */
+    /* Plant matching tag AND counter so T1 (index 0, hist_len=8) is the provider.
+     * Without a planted tag, T1 would miss and T0 would be returned instead. */
     int hist_len = T_HIST_LENGTHS[T_UNTAGGED_IDX]; /* 8 */
-    int idx = tage_compute_index((uint32_t)pc,
-                                 g_pred->config.tage.global_history,
+    uint64_t ghr0 = g_pred->config.tage.global_history;
+    int idx = tage_compute_index((uint32_t)pc, ghr0,
                                  hist_len, T_TAGGED_TABLE_SIZE);
+    unsigned char tag0 = tage_compute_tag((uint32_t)pc, ghr0, hist_len, T_TAG_WIDTH);
+    if (tag0 == 0xFF) {
+        TEST_IGNORE_MESSAGE("Computed T1 tag collides with sentinel; skip");
+        return;
+    }
+    g_pred->config.tage.tags[T_UNTAGGED_IDX][idx]     = tag0;
     g_pred->config.tage.counters[T_UNTAGGED_IDX][idx] = 5;
 
     char *p = bpred_dir_lookup_tage(g_pred, pc);
@@ -549,7 +568,7 @@ void test_update_misprediction_allocatesEntry(void)
      * (before the shift).  Scan all three tagged tables.
      */
     int found = 0;
-    for (int t = 1; t < T_N_TAGGED; t++) {
+    for (int t = 0; t < T_N_TAGGED; t++) {
         int hist_len = T_HIST_LENGTHS[t];
         int idx = tage_compute_index((uint32_t)pc, ghr,
                                      hist_len, T_TAGGED_TABLE_SIZE);
@@ -582,10 +601,18 @@ void test_update_repeatedTaken_convergesStronglyTaken(void)
     g_pred->config.tage.global_history = 0xA5A5A5A5A5A5A5A5ULL;
     uint64_t fixed_ghr = g_pred->config.tage.global_history;
 
-    /* Compute the T1 index and plant counter = 0 there */
+    /* Compute T1 index, plant both tag and counter so T1 is the provider.
+     * Without a planted tag at index 0, T0 would be the provider instead. */
     int hist0 = T_HIST_LENGTHS[T_UNTAGGED_IDX];
     int idx0  = tage_compute_index((uint32_t)pc, fixed_ghr,
                                     hist0, T_TAGGED_TABLE_SIZE);
+    unsigned char tag0 = tage_compute_tag((uint32_t)pc, fixed_ghr,
+                                          hist0, T_TAG_WIDTH);
+    if (tag0 == 0xFF) {
+        TEST_IGNORE_MESSAGE("Computed T1 tag collides with sentinel; skip");
+        return;
+    }
+    g_pred->config.tage.tags[T_UNTAGGED_IDX][idx0]     = tag0;
     g_pred->config.tage.counters[T_UNTAGGED_IDX][idx0] = 0;
 
     /* Repeatedly: lookup, update (taken), then restore GHR */

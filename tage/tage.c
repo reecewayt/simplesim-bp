@@ -18,7 +18,7 @@
  *    2      32        yes     T3 – tagged, medium history
  *    3      64        yes     T4 – tagged, longest history
  *
- *  T0 (base bimodal) is managed by bpred.c via pred->dirpred.bimod.
+ *  T0 (base bimodal) is managed internally; stored in config.tage.base_table.
  *
  * ── Counter encoding ─────────────────────────────────────────────────────
  *  3-bit unsigned char, stored in [0, 7].
@@ -41,10 +41,15 @@
 #define TAGE_RESET_PERIOD  (1u << 18)
 
 /*
- * Index of the "untagged" component (T1).  Its tags[] pointer is NULL;
- * it is indexed purely by folded history and PC.
+ * PC hash for T0 (base bimodal) – matches the BIMOD_HASH formula in bpred.c.
  */
-#define TAGE_UNTAGGED_IDX  0
+#define TAGE_BASE_HASH(pc, sz) \
+    ((((unsigned)(pc) >> 19) ^ ((unsigned)(pc) >> MD_BR_SHIFT)) & ((sz) - 1))
+
+/*
+ * Index of the "altprov == T0" sentinel (kept for documentation; -1 in g_state
+ * always means T0 base bimodal is the altprovider or sole provider).
+ */
 
 /* ── Per-lookup state ────────────────────────────────────────────────────── */
 /*
@@ -67,8 +72,8 @@ static tage_state_t g_state;
 /**
  * @brief Probe the TAGE predictor and return a pointer to the provider's counter.
  *
- * Searches tagged components T4→T2 (longest history first) for a tag match.
- * Falls back to T1 (untagged) if no tagged component matches. Records provider
+ * Searches tagged components T4→T1 (longest history first) for a tag match.
+ * Falls back to T0 (untagged) if no tagged component matches. Records provider
  * and alternate provider in g_state for use by bpred_dir_update_tage().
  *
  * @param pred_dir  TAGE direction predictor instance (config.tage must be initialized).
@@ -85,7 +90,7 @@ bpred_dir_lookup_tage(struct bpred_dir_t *pred_dir, md_addr_t baddr)
     uint64_t ghr      = pred_dir->config.tage.global_history;
     uint32_t pc       = (uint32_t)baddr;
 
-    /* Initialise state: assume no tagged match (will use T1 untagged) */
+    /* Initialise state: no match found yet (T0 base bimodal is the fallback) */
     g_state.prov_table = -1;
     g_state.prov_idx   = -1;
     g_state.alt_table  = -1;
@@ -93,10 +98,10 @@ bpred_dir_lookup_tage(struct bpred_dir_t *pred_dir, md_addr_t baddr)
     g_state.alt_pred   = -1;
 
     /*
-     * Search tagged components T4 → T2 (longest history first).
-     * T1 (index 0) has no tags and is treated separately below.
+     * Search tagged components T4 → T1 (longest history first).
+     * All four indices (0-3) participate in tag matching.
      */
-    for (i = n_tagged - 1; i >= 1; i--) {
+    for (i = n_tagged - 1; i >= 0; i--) {
         int           hist_len = pred_dir->config.tage.hist_lengths[i];
         int           idx      = tage_compute_index(pc, ghr, hist_len, tbl_size);
         unsigned char tag      = tage_compute_tag(pc, ghr, hist_len,
@@ -127,30 +132,26 @@ bpred_dir_lookup_tage(struct bpred_dir_t *pred_dir, md_addr_t baddr)
     }
 
     /*
-     * Resolve altprovider when provider is in a tagged table but no second
-     * tagged match was found: fall back to T1 (untagged) as altprovider.
+     * Unified fallback rules (applied after the tag search above):
+     *
+     *  – If a provider was found (T1-T4 tagged match) but no second tagged
+     *    match exists: use T0 (base bimodal) as the altprovider.
+     *
+     *  – If NO tagged table matched at all: T0 is the sole provider;
+     *    return a pointer to its counter directly.
      */
-    if (g_state.prov_table >= 1 && g_state.alt_table == -1) {
-        int hist0 = pred_dir->config.tage.hist_lengths[TAGE_UNTAGGED_IDX];
-        int idx0  = tage_compute_index(pc, ghr, hist0, tbl_size);
-        g_state.alt_table = TAGE_UNTAGGED_IDX;
-        g_state.alt_idx   = idx0;
-        g_state.alt_pred  = tage_ctr_pred(
-            pred_dir->config.tage.counters[TAGE_UNTAGGED_IDX][idx0]);
-    }
-
-    /*
-     * If no tagged component matched, use T1 (untagged) as provider.
-     * T1 is always available (indexed by 8-bit folded history, no tag check).
-     * The T0 bimodal (managed by bpred.c) acts as the implicit altprovider
-     * and is represented here as alt_table = -1.
-     */
-    if (g_state.prov_table == -1) {
-        int hist0 = pred_dir->config.tage.hist_lengths[TAGE_UNTAGGED_IDX];
-        int idx0  = tage_compute_index(pc, ghr, hist0, tbl_size);
-        g_state.prov_table = TAGE_UNTAGGED_IDX;
-        g_state.prov_idx   = idx0;
-        /* alt_table remains -1 (bimodal handled externally) */
+    {
+        int base_idx = (int)TAGE_BASE_HASH(pc,
+                           (unsigned)pred_dir->config.tage.base_table_size);
+        if (g_state.prov_table >= 0 && g_state.alt_table == -1) {
+            /* Provider found, no alt — T0 base bimodal is the altprovider */
+            g_state.alt_pred =
+                tage_ctr_pred(pred_dir->config.tage.base_table[base_idx]);
+        }
+        if (g_state.prov_table == -1) {
+            /* No tagged match — T0 base bimodal is the sole provider */
+            return (char *)&pred_dir->config.tage.base_table[base_idx];
+        }
     }
 
     return (char *)&pred_dir->config.tage.counters
@@ -179,6 +180,14 @@ bpred_dir_update_tage(struct bpred_dir_t *pred_dir,
     (void)btarget;       /* direction predictor does not use branch target */
     (void)dir_update_ptr; /* we recover the counter from g_state directly  */
 
+    /* ── 0. Always update T0 base bimodal ──────────────────────────────────
+     * T0 is trained on every conditional branch regardless of which table
+     * provides the prediction (matches the original TAGE paper). */
+    {
+        int base_idx = (int)TAGE_BASE_HASH(pc, (unsigned)pred_dir->config.tage.base_table_size);
+        tage_ctr_update(&pred_dir->config.tage.base_table[base_idx], taken);
+    }
+
     /* ── 1. Update provider counter ────────────────────────────────────── */
     if (prov_table >= 0 && prov_idx >= 0)
         tage_ctr_update(&pred_dir->config.tage.counters[prov_table][prov_idx],
@@ -189,11 +198,11 @@ bpred_dir_update_tage(struct bpred_dir_t *pred_dir,
 
     /* ── 2. Update usefulness bit of provider ───────────────────────────── */
     /*
-     * Only update for properly-tagged components (indices 1-3).
-     * Usefulness is incremented when P is correct and AltP is wrong;
-     * decremented when P is wrong and AltP is correct.
+     * Usefulness is incremented when provider is correct and altprov is wrong;
+     * decremented when provider is wrong and altprov is correct.
+     * Applies to all tagged components (T1-T4, indices 0-3).
      */
-    if (prov_table >= 1 &&
+    if (prov_table >= 0 &&
         prov_idx   >= 0 &&
         pred_dir->config.tage.usefulness[prov_table] != NULL &&
         alt_pred != -1 &&
@@ -208,12 +217,12 @@ bpred_dir_update_tage(struct bpred_dir_t *pred_dir,
     /* ── 3. Allocate on misprediction ───────────────────────────────────── */
     if (prov_pred != !!taken) {
         /*
-         * Determine the first candidate table: we can only allocate in a
-         * table with *longer* history than the current provider.
-         *   - If provider is T1 (idx 0, untagged): candidates are 1, 2, 3.
-         *   - Otherwise: candidates are prov_table+1 … n_tagged-1.
+         * Determine the first candidate table: allocate in a table with
+         * *longer* history than the current provider.
+         *   - T0 as provider (prov_table = -1): all tagged tables are candidates.
+         *   - T1-T4 as provider: tables with strictly longer history.
          */
-        int start = (prov_table == TAGE_UNTAGGED_IDX) ? 1 : prov_table + 1;
+        int start = prov_table + 1; /* -1+1=0 for T0; i+1 for Ti */
 
         if (start < n_tagged) {
             /* Look for the shortest-history candidate whose entry is free (u=0) */
@@ -275,7 +284,7 @@ bpred_dir_update_tage(struct bpred_dir_t *pred_dir,
         static unsigned int s_branch_count = 0;
         if (++s_branch_count == TAGE_RESET_PERIOD) {
             s_branch_count = 0;
-            for (i = 1; i < n_tagged; i++) {
+            for (i = 0; i < n_tagged; i++) {   /* include T1 (index 0) */
                 if (pred_dir->config.tage.usefulness[i] != NULL)
                     memset(pred_dir->config.tage.usefulness[i], 0,
                            (size_t)tbl_size * sizeof(unsigned char));
